@@ -35,12 +35,12 @@ close all
 % end
 
 
-arquivo_excel = 'sistema.xlsx';
+arquivo_excel = '5b1.xlsx';
 
 fprintf('=== IMPORTANDO DADOS DO EXCEL ===\n');
 
 % Configuração das bases globais
-Sbase = 100; % MVA
+Sbase = input('Informe a potência base do sistema(MVA): \n'); % MVA
 fprintf('=== PROCESSANDO DADOS BRUTOS NO PADRÃO IEEE ===\n');
 
 % 1. Leitura direta das abas do Excel
@@ -68,8 +68,9 @@ for i = 1:nb
     end
     
     barras(i,3) = tabela_raw_barras.V_pu(i); % Módulo de tensão inicial
-    barras(i,4) = 0; % Ângulo inicial (0 rad)
+    barras(i,4) = tabela_raw_barras.V_th(i); % Ângulo inicial (0 rad)
     
+
     % Adaptando as potências líquidas da tabela: (Geração - Carga) / Sbase
     barras(i,5) = (tabela_raw_barras.Gen_MW(i) - tabela_raw_barras.Load_MW(i)) / Sbase;
     barras(i,6) = (tabela_raw_barras.Gen_Mvar(i) - tabela_raw_barras.Load_Mvar(i)) / Sbase;
@@ -80,7 +81,8 @@ linhas = [tabela_raw_linhas.From_Bus, ...
           tabela_raw_linhas.To_Bus, ...
           tabela_raw_linhas.R_pu, ...
           tabela_raw_linhas.X_pu, ...
-          tabela_raw_linhas.B_pu];
+          tabela_raw_linhas.B_pu, ...
+          tabela_raw_linhas.Tap_pu];
 
 fprintf('>> Dados convertidos para pu e condicionados com sucesso!\n');
 
@@ -97,11 +99,13 @@ for k = 1:nl
     j = find(barras(:,1) == linhas(k,2)); % Resgata as barras de destino (Para) que o cabo k interliga
     z = linhas(k,3) + 1j*linhas(k,4); % Monta a impedância (R + jX)
     B_shunt = linhas(k,5);
+    tap = linhas(k,6);
+    
     y = 1/z; % Transforma em admitância (Y = 1/Z)
-    Ybus(i,j) = -y; % Elementos fora da diagonal principal são negativos
-    Ybus(j,i) = -y;
-    Ybus(i,i) = Ybus(i,i) + y + 1j*B_shunt;
-    Ybus(j,j) = Ybus(j,j) + y + 1j*B_shunt;
+    Ybus(i,j) = -y/tap; % Elementos fora da diagonal principal são negativos
+    Ybus(j,i) = -y/tap;
+    Ybus(i,i) = Ybus(i,i) + (y/(tap^2)) + 1j*(B_shunt/2);
+    Ybus(j,j) = Ybus(j,j) + y + 1j*(B_shunt/2);
 end
 Ym = abs(Ybus); % Armazena o valor do módulo de cada elemento da matriz
 Yth = angle(Ybus); % Armazena o valor do ângulo de cada elemento da matriz
@@ -187,13 +191,14 @@ for k = 1:nl
     % Resgata as barras de destino (Para) que o cabo k interliga
     y_linha = 1 / (linhas(k,3) + 1j*linhas(k,4)); % Adamitância do próprio cabo
     b_metade = 1j * (linhas(k,5) / 2); % Metade da susceptância Shunt (modelo pi)
+    tap = linhas(k,6);
     
     Vi = V(i) * exp(1j*theta(i));
     Vj = V(j) * exp(1j*theta(j));
     
     % Potência complexa S = V * conj(I)
-    S_ij = Vi * conj((Vi - Vj) * y_linha + Vi * b_metade);
-    S_ji = Vj * conj((Vj - Vi) * y_linha + Vj * b_metade);
+    S_ij = Vi * conj(((Vi/(tap^2)) - (Vj/tap)) * y_linha + Vi * b_metade);
+    S_ji = Vj * conj((Vj - (Vi/tap)) * y_linha + Vj * b_metade);
     
     % Separação em Ativa e Reativa
     P_fluxo(k,1) = real(S_ij);
@@ -284,7 +289,7 @@ for i = 1:nb
     
     if tipo == 1 
         % Barra Slack: Calcula a geração real ativa e reativa necessárias
-        Gen_MW(i)   = (Pcalc(i) * Sbase) + Load_MW(i);
+        Gen_MW(i) = (Pcalc(i) * Sbase) + Load_MW(i);
         Gen_Mvar(i) = (Qcalc(i) * Sbase) + Load_Mvar(i);
         type{i} = 'SLACK';
         
@@ -296,8 +301,9 @@ for i = 1:nb
         
     elseif tipo == 3
         % Barra PQ: Não gera nada, garante que as colunas de geração fiquem zeradas
-        Gen_MW(i) = 0;
-        Gen_Mvar(i) = 0;
+%         Gen_MW(i) = 0;  
+%         Gen_Mvar(i) = 0;
+        
         type{i} = 'PQ';
        
     end
@@ -305,7 +311,7 @@ end
 
 % 3. Preparação das colunas de tensão e ângulo
 PU_Volt = V;
-Volt_kV = V * 138; % Altere 138 para a tensão base do seu sistema se necessário
+Volt_kV = V * Vbase; % Altere 138 para a tensão base do seu sistema se necessário
 Angle_Deg = rad2deg(theta);  
 
 % 4. Montagem da tabela final idêntica ao PowerWorld
