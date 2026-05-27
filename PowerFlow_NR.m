@@ -35,7 +35,7 @@ close all
 % end
 
 
-arquivo_excel = '5b1.xlsx';
+arquivo_excel = 'model.xlsx'; % 5b1.xlsx
 
 fprintf('=== IMPORTANDO DADOS DO EXCEL ===\n');
 
@@ -154,7 +154,7 @@ while ~conv && iter < max_iter
                 N(i,j) =  V(i) * Ym(i,j) * cos(ang);
                 M(i,j) = -V(i) * V(j) * Ym(i,j) * cos(ang);
                 L(i,j) = -V(i) * Ym(i,j) * sin(ang);
-            else % Cálcuços utilizando as simplificações
+            else % Cálculos utilizando as simplificações
                 H(i,i) = -Qcalc(i) - (V(i)^2 * imag(Ybus(i,i)));
                 N(i,i) = (Pcalc(i) / V(i)) + (V(i) * real(Ybus(i,i)));
                 M(i,i) = Pcalc(i) - (V(i)^2 * real(Ybus(i,i)));
